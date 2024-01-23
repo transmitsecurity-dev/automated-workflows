@@ -1,5 +1,5 @@
 ARG NODE_VERSION=18
-FROM n8nio/base:${NODE_VERSION}
+FROM europe-docker.pkg.dev/jarp-prod-eu/remote-docker-hub/n8nio/base:${NODE_VERSION}
 
 ARG N8N_VERSION
 RUN if [ -z "$N8N_VERSION" ] ; then echo "The N8N_VERSION argument is missing!" ; exit 1; fi
@@ -22,7 +22,7 @@ RUN set -eux; \
 	find /usr/local/lib/node_modules/n8n -type f -name "*.ts" -o -name "*.js.map" -o -name "*.vue" | xargs rm -f && \
 	rm -rf /root/.npm
 
-COPY docker-entrypoint.sh /
+COPY docker/images/n8n/docker-entrypoint.sh /
 
 RUN \
 	mkdir .n8n && \

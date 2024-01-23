@@ -1,0 +1,199 @@
+name: CI
+env:
+  GCR_PROJECT: "jarp-prod-eu"
+
+on:
+  workflow_call:
+    inputs:
+      registry_url:
+        required: false
+        default: "europe-docker.pkg.dev/jarp-prod-eu/riskid-docker-dev"
+        type: string
+      head:
+        required: true
+        default: ${{ github.ref_name }}
+        type: string
+      repo_name:
+        required: false
+        default: "automated-workflows"
+        type: string
+      docker_file_path:
+        required: false
+        default: "docker/images/n8n-custom/Dockerfile"
+        type: string
+      commit_hash:
+        required: false
+        default: ${{ github.sha }}
+        type: string 
+ 
+  workflow_dispatch:
+    inputs:
+      registry_url:
+        required: false
+        default: "europe-docker.pkg.dev/jarp-prod-eu/riskid-docker-dev"
+        type: string
+      head:
+        required: false
+        default: "master"
+        type: string
+      repo_name:
+        required: false
+        default: "automated-workflows"
+        type: string
+      docker_file_path:
+        required: false
+        default: "docker/images/n8n-custom/Dockerfile"
+        type: string
+
+jobs:
+  install:
+    name: Install and Build
+    runs-on: medium-runner
+    steps:
+      - uses: actions/checkout@v3.5.3
+
+      # - uses: pnpm/action-setup@v2.4.0
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v3.7.0
+        with:
+          node-version: 18.x
+          # cache: pnpm
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Cache build artifacts
+        uses: actions/cache/save@v3.3.1
+        with:
+          path: ./packages/**/dist
+          key: ${{ github.sha }}:18-test-lint
+
+  lint:
+    name: Lint
+    runs-on: general-purpose
+    needs: install
+    steps:
+      - uses: actions/checkout@v3.5.3
+
+      # - uses: pnpm/action-setup@v2.4.0
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v3.7.0
+        with:
+          node-version: 18.x
+          # cache: pnpm
+      
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore cached build artifacts
+        uses: actions/cache/restore@v3.3.1
+        with:
+          path: ./packages/**/dist
+          key: ${{ github.sha }}:18-test-lint
+      
+      - name: Lint
+        run: pnpm lint
+  
+  test:
+    name: Test
+    runs-on: large-runner
+    needs: install
+    steps:
+      - uses: actions/checkout@v3.5.3
+
+      # - uses: pnpm/action-setup@v2.4.0
+
+      - name: Use Node.js 18
+        uses: actions/setup-node@v3.7.0
+        with:
+          node-version: 18.x
+          # cache: pnpm
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore cached build artifacts
+        uses: actions/cache/restore@v3.3.1
+        with:
+          path: ./packages/**/dist
+          key: ${{ github.sha }}:18-test-lint
+      
+      - name: Lint
+        run: pnpm test
+    
+  Package:
+    name: Package
+    runs-on: large-runner
+    needs: install
+    steps:
+    - uses: actions/checkout@v3.5.3
+       
+    # - uses: pnpm/action-setup@v2.4.0
+       
+    - name: Use Node.js 18
+      uses: actions/setup-node@v3.7.0
+      with:
+        node-version: 18.x
+        cache: pnpm
+
+    - name: Install pnpm
+      run: npm install -g pnpm
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Restore cached build artifacts
+      uses: actions/cache/restore@v3.3.1
+      with:
+        path: ./packages/**/dist
+        key: ${{ github.sha }}:18-test-lint
+
+    - name: login to gcp
+      uses: 'google-github-actions/auth@v1'
+      with:
+        credentials_json: '${{ secrets.GCR_GOOGLE_CREDENTIALS }}'  
+
+    - name: set-up gcloud
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ env.GCR_PROJECT }}  
+
+    - name: 'Docker auth'
+      shell: bash
+      run: gcloud auth configure-docker europe-docker.pkg.dev
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      with:
+        driver: docker
+  
+    - name: Prepare Docker Image Tag
+      id: docker_image_tag
+      run: |
+        BRANCH_NAME=$(echo ${{ inputs.head }} | tr '[:upper:]' '[:lower:]')   
+        echo "DOCKER_TAG=${{ inputs.registry_url }}/${{ inputs.repo_name }}:$BRANCH_NAME${{ inputs.commit_hash }}"
+        echo "DOCKER_TAG=${{ inputs.registry_url }}/${{ inputs.repo_name }}:$BRANCH_NAME${{ inputs.commit_hash }}" >> $GITHUB_OUTPUT
+
+    - name: Build service/package docker image and push to Artifactory
+      uses: docker/build-push-action@v3
+      with:
+        context: ./docker/images/n8n-custom
+        file: ./${{ inputs.docker_file_path }}
+        push: true
+        tags: ${{ steps.docker_image_tag.outputs.DOCKER_TAG }}
+        build-args: |
+          N8N_VERSION=${{ steps.docker_image_tag.outputs.DOCKER_TAG }}

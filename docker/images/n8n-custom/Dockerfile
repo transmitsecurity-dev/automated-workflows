@@ -1,7 +1,7 @@
 ARG NODE_VERSION=18
 
 # 1. Create an image to build n8n
-FROM n8nio/base:${NODE_VERSION} as builder
+FROM europe-docker.pkg.dev/jarp-prod-eu/remote-docker-hub/n8nio/base:${NODE_VERSION} as builder
 
 COPY --chown=node:node turbo.json package.json .npmrc pnpm-lock.yaml pnpm-workspace.yaml jest.config.js tsconfig*.json ./
 COPY --chown=node:node scripts ./scripts
@@ -25,7 +25,7 @@ RUN rm -rf patches .npmrc *.yaml node_modules/.cache packages/**/node_modules/.c
 
 # 2. Start with a new clean image with just the code that is needed to run n8n
 FROM n8nio/base:${NODE_VERSION}
-ARG N8N_RELEASE_TYPE=dev
+ARG N8N_RELEASE_TYPE=stable
 COPY --from=builder /home/node /usr/local/lib/node_modules/n8n
 RUN ln -s /usr/local/lib/node_modules/n8n/packages/cli/bin/n8n /usr/local/bin/n8n
 

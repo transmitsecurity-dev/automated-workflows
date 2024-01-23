@@ -1,0 +1,15 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+    - master
+    - RID-4998
+
+jobs:
+  call-ci:
+    uses: transmitsecurity-dev/automated-workflows/.github/workflows/ci.yml@RID-4998
+    secrets: inherit
+    with:
+      head: ${{ github.head_ref || github.ref_name }}
+      commit_hash: ${{ github.sha }}
